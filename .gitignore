@@ -4,3 +4,5 @@ lightning_logs/
 checkpoints/
 runs/
 __pycache__/
+images.db
+train_annotations.json

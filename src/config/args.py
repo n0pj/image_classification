@@ -6,7 +6,9 @@ def get_train_args():
 
     # Data related arguments
     parser.add_argument('--data-dir', type=str, required=True,
-                        help='Directory containing all data')
+                        help='Directory containing all images')
+    parser.add_argument('--annotation-file', type=str, required=True,
+                        help='Path to COCO format annotation file')
     parser.add_argument('--train-dir', type=str,
                         help='Directory containing training data (if already split)')
     parser.add_argument('--test-dir', type=str,

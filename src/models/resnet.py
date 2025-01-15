@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision.models import resnet18
 
 
@@ -48,4 +49,5 @@ class FlexibleResNet(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
 
-        return x
+        # マルチラベル分類のための出力
+        return torch.sigmoid(x)

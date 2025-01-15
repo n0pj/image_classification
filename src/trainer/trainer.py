@@ -8,7 +8,7 @@ from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 from pathlib import Path
-from src.data.dataset import DatasetSplitter
+from src.data.dataset import COCOSplitter
 from src.models.resnet import FlexibleResNet
 from src.data.dataset import CustomDataset
 
@@ -20,16 +20,16 @@ class ImageNetTrainer:
             "cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
 
-        # データセットの分割
-        splitter = DatasetSplitter(
-            source_dir=args.data_dir,
+        # アノテーションの分割
+        splitter = COCOSplitter(
+            annotation_file=args.annotation_file,
             test_size=args.test_size if hasattr(args, 'test_size') else 0.2,
             random_state=args.random_state if hasattr(
                 args, 'random_state') else 42
         )
 
-        # 分割したデータのパスを保存
-        self.train_dir, self.test_dir = splitter.split_dataset()
+        # 分割したアノテーションのパスを保存
+        self.train_annotation, self.test_annotation = splitter.split_dataset()
 
         # TensorBoard 用の writer 初期化
         current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -69,13 +69,15 @@ class ImageNetTrainer:
 
         # カスタムデータセットの読み込み
         self.train_dataset = CustomDataset(
-            root_dir=str(self.train_dir),  # Path オブジェクトを文字列に変換
+            root_dir=str(args.data_dir),
+            annotation_file=str(self.train_annotation),
             transform=train_transform,
             max_size=256
         )
 
         self.test_dataset = CustomDataset(
-            root_dir=str(self.test_dir),  # Path オブジェクトを文字列に変換
+            root_dir=str(args.data_dir),
+            annotation_file=str(self.test_annotation),
             transform=test_transform,
             max_size=256
         )
@@ -153,7 +155,7 @@ class ImageNetTrainer:
                 self.args, 'weight_decay') else 5e-4
         )
 
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss()
 
         # TensorBoard のグラフ追加 ( オプション )
         try:
@@ -183,9 +185,10 @@ class ImageNetTrainer:
             self.optimizer.step()
 
             total_loss += loss.item()
-            _, predicted = output.max(1)
-            total += target.size(0)
-            correct += predicted.eq(target).sum().item()
+            # マルチラベル分類の評価
+            predicted = (output > 0.5).float()
+            total += target.size(0) * target.size(1)  # 全ラベルの数
+            correct += (predicted == target).sum().item()
 
             # バッチごとの損失を TensorBoard に記録
             if batch_idx % 100 == 0:
@@ -218,16 +221,16 @@ class ImageNetTrainer:
                 loss = self.criterion(output, target)
 
                 test_loss += loss.item()
-                _, predicted = output.max(1)
-                total += target.size(0)
-                correct += predicted.eq(target).sum().item()
+            # マルチラベル分類の評価
+            predicted = (output > 0.5).float()
+            total += target.size(0) * target.size(1)
+            correct += (predicted == target).sum().item()
 
-                # クラスごとの正解数を計算
-                for i in range(len(target)):
-                    label = target[i]
-                    class_total[label] += 1
-                    if predicted[i] == label:
-                        class_correct[label] += 1
+            # クラスごとの正解数を計算
+            for i in range(self.num_classes):
+                class_total[i] += target[:, i].sum().item()
+                class_correct[i] += ((predicted[:, i] == 1)
+                                     & (target[:, i] == 1)).sum().item()
 
                 if batch_idx % 10 == 0:
                     print(f'Test Batch: {batch_idx}/{len(self.test_loader)} '
