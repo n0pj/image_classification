@@ -60,23 +60,24 @@ class ImageNetTrainer:
         ])
 
         # train_dir と test_dir が存在することを確認
-        if not self.train_dir.exists():
+        # アノテーションファイルの存在を確認
+        if not Path(self.train_annotation).exists():
             raise FileNotFoundError(
-                f"Training directory not found: {self.train_dir}")
-        if not self.test_dir.exists():
+                f"Training annotation file not found: {self.train_annotation}")
+        if not Path(self.test_annotation).exists():
             raise FileNotFoundError(
-                f"Test directory not found: {self.test_dir}")
+                f"Test annotation file not found: {self.test_annotation}")
 
         # カスタムデータセットの読み込み
         self.train_dataset = CustomDataset(
-            root_dir=str(args.data_dir),
+            root_dir=str(self.args.data_dir),
             annotation_file=str(self.train_annotation),
             transform=train_transform,
             max_size=256
         )
 
         self.test_dataset = CustomDataset(
-            root_dir=str(args.data_dir),
+            root_dir=str(self.args.data_dir),
             annotation_file=str(self.test_annotation),
             transform=test_transform,
             max_size=256
