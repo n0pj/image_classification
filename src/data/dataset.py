@@ -141,14 +141,13 @@ class CustomDataset(Dataset):
         print(f"Total images found: {len(self.samples)}")
 
         # クラスごとの画像数をカウント
-        class_counts = {}
-        for _, class_idx in self.samples:
-            class_name = self.classes[class_idx]
-            class_counts[class_name] = class_counts.get(class_name, 0) + 1
+        class_counts = np.zeros(self.num_classes)
+        for _, labels in self.samples:
+            class_counts += labels
 
         print("\nImages per class:")
-        for class_name, count in class_counts.items():
-            print(f"  {class_name}: {count}")
+        for i, count in enumerate(class_counts):
+            print(f"  {self.classes[i]}: {int(count)}")
         print()
 
     def __len__(self):

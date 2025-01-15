@@ -137,7 +137,8 @@ class ImageNetTrainer:
 
         # バッチとしてスタック
         images = torch.stack(padded_images)
-        labels = torch.tensor(labels)
+        # マルチラベルのラベルをスタック
+        labels = torch.stack([torch.FloatTensor(label) for label in labels])
 
         return images, labels
 
@@ -284,12 +285,8 @@ class ImageNetTrainer:
             print(f'\nEpoch: {epoch+1}/{self.args.epochs}')
 
             # エポックごとのデータ数を確認
-            train_samples = sum([len(self.train_loader.dataset.samples[i:i+self.args.batch_size])
-                                 for i in range(0, len(self.train_loader.dataset.samples),
-                                                self.args.batch_size)])
-            test_samples = sum([len(self.test_loader.dataset.samples[i:i+self.args.batch_size])
-                                for i in range(0, len(self.test_loader.dataset.samples),
-                                               self.args.batch_size)])
+            train_samples = len(self.train_dataset)
+            test_samples = len(self.test_dataset)
 
             print(f"Training samples this epoch: {train_samples}")
             print(f"Test samples this epoch: {test_samples}")
