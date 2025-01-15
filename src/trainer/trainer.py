@@ -223,16 +223,17 @@ class ImageNetTrainer:
                 loss = self.criterion(output, target)
 
                 test_loss += loss.item()
-            # マルチラベル分類の評価
-            predicted = (output > 0.5).float()
-            total += target.size(0) * target.size(1)
-            correct += (predicted == target).sum().item()
 
-            # クラスごとの正解数を計算
-            for i in range(self.num_classes):
-                class_total[i] += target[:, i].sum().item()
-                class_correct[i] += ((predicted[:, i] == 1)
-                                     & (target[:, i] == 1)).sum().item()
+                # マルチラベル分類の評価
+                predicted = (output > 0.5).float()
+                total += target.size(0) * target.size(1)
+                correct += (predicted == target).sum().item()
+
+                # クラスごとの正解数を計算
+                for i in range(self.num_classes):
+                    class_total[i] += target[:, i].sum().item()
+                    class_correct[i] += ((predicted[:, i] == 1)
+                                         & (target[:, i] == 1)).sum().item()
 
                 if batch_idx % 10 == 0:
                     print(f'Test Batch: {batch_idx}/{len(self.test_loader)} '

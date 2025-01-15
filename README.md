@@ -1,7 +1,7 @@
 ## load COCO 1.0 dataset
 
 ```sh
-python src/train.py \
+python main.py \
   --data-dir /path/to/images \
   --annotation-file /path/to/annotations.json \
   --batch-size 32 \
