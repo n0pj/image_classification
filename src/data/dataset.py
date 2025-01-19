@@ -150,6 +150,13 @@ class CustomDataset(Dataset):
             print(f"  {self.classes[i]}: {int(count)}")
         print()
 
+    def get_class_counts(self):
+        """各クラスのサンプル数を返す"""
+        class_counts = np.zeros(self.num_classes)
+        for _, labels in self.samples:
+            class_counts += labels
+        return class_counts
+
     def __len__(self):
         return len(self.samples)
 

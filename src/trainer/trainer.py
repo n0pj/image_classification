@@ -149,6 +149,19 @@ class ImageNetTrainer:
         # モデルを GPU に移動
         self.model = self.model.to(self.device)
 
+        # クラスの重みを計算
+        total_samples = len(self.train_dataset)
+        class_samples = self.train_dataset.get_class_counts()
+        pos_weight = torch.FloatTensor(
+            [total_samples / (samples + 1e-5) for samples in class_samples])
+        pos_weight = pos_weight.to(self.device)
+
+        # 重み付き損失関数の設定
+        self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        print("\nClass weights:")
+        for i, weight in enumerate(pos_weight):
+            print(f"{self.train_dataset.classes[i]}: {weight:.2f}")
+
         # オプティマイザーの設定
         self.optimizer = RAdamScheduleFree(
             self.model.parameters(),
@@ -156,8 +169,6 @@ class ImageNetTrainer:
             weight_decay=self.args.weight_decay if hasattr(
                 self.args, 'weight_decay') else 5e-4
         )
-
-        self.criterion = nn.BCEWithLogitsLoss()
 
         # TensorBoard のグラフ追加 ( オプション )
         try:
