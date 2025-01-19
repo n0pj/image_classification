@@ -177,7 +177,8 @@ class CustomDataset(Dataset):
         # 基本的なデータ拡張の設定
         self.base_transform = A.Compose([
             A.RandomRotate90(p=0.5),
-            A.Flip(p=0.5),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
             A.ShiftScaleRotate(shift_limit=0.0625,
                                scale_limit=0.1, rotate_limit=45, p=0.5),
             A.OneOf([

@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 from schedulefree import RAdamScheduleFree
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
@@ -43,39 +41,10 @@ class ImageNetTrainer:
         self._setup_model()
 
     def _setup_data(self):
-        # データ拡張とノーマライゼーションの定義
-        train_transform = A.Compose([
-            A.RandomRotate90(p=0.5),
-            A.Flip(p=0.5),
-            A.ShiftScaleRotate(shift_limit=0.0625,
-                               scale_limit=0.1, rotate_limit=45, p=0.5),
-            A.OneOf([
-                A.GaussNoise(p=1),
-                A.GaussianBlur(p=1),
-                A.MotionBlur(p=1),
-            ], p=0.3),
-            A.OneOf([
-                A.OpticalDistortion(p=1),
-                A.GridDistortion(p=1),
-                A.ElasticTransform(p=1),
-            ], p=0.3),
-            A.OneOf([
-                A.CLAHE(clip_limit=2),
-                A.Sharpen(),
-                A.Emboss(),
-                A.RandomBrightnessContrast(),
-            ], p=0.3),
-            A.HueSaturationValue(p=0.3),
-            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ToTensorV2()
-        ])
+        # データ拡張の設定はCustomDatasetクラスで定義済み
+        train_transform = None  # CustomDatasetのbase_transformが使用される
+        test_transform = None   # CustomDatasetのbase_transformが使用される
 
-        test_transform = A.Compose([
-            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ToTensorV2()
-        ])
-
-        # train_dir と test_dir が存在することを確認
         # アノテーションファイルの存在を確認
         if not Path(self.train_annotation).exists():
             raise FileNotFoundError(
