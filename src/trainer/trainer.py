@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torchvision import transforms
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 from schedulefree import RAdamScheduleFree
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
@@ -43,20 +44,35 @@ class ImageNetTrainer:
 
     def _setup_data(self):
         # データ拡張とノーマライゼーションの定義
-        train_transform = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomAffine(degrees=10, translate=(0.1, 0.1)),
-            transforms.ColorJitter(
-                brightness=0.2, contrast=0.2, saturation=0.2),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+        train_transform = A.Compose([
+            A.RandomRotate90(p=0.5),
+            A.Flip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.0625,
+                               scale_limit=0.1, rotate_limit=45, p=0.5),
+            A.OneOf([
+                A.GaussNoise(p=1),
+                A.GaussianBlur(p=1),
+                A.MotionBlur(p=1),
+            ], p=0.3),
+            A.OneOf([
+                A.OpticalDistortion(p=1),
+                A.GridDistortion(p=1),
+                A.ElasticTransform(p=1),
+            ], p=0.3),
+            A.OneOf([
+                A.CLAHE(clip_limit=2),
+                A.Sharpen(),
+                A.Emboss(),
+                A.RandomBrightnessContrast(),
+            ], p=0.3),
+            A.HueSaturationValue(p=0.3),
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2()
         ])
 
-        test_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+        test_transform = A.Compose([
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2()
         ])
 
         # train_dir と test_dir が存在することを確認
@@ -69,18 +85,25 @@ class ImageNetTrainer:
                 f"Test annotation file not found: {self.test_annotation}")
 
         # カスタムデータセットの読み込み
+        use_cache = getattr(self.args, 'use_cache', True)
+        cache_dir = getattr(self.args, 'cache_dir', None)
+
         self.train_dataset = CustomDataset(
             root_dir=str(self.args.data_dir),
             annotation_file=str(self.train_annotation),
             transform=train_transform,
-            max_size=256
+            max_size=256,
+            use_cache=use_cache,
+            cache_dir=cache_dir
         )
 
         self.test_dataset = CustomDataset(
             root_dir=str(self.args.data_dir),
             annotation_file=str(self.test_annotation),
             transform=test_transform,
-            max_size=256
+            max_size=256,
+            use_cache=use_cache,
+            cache_dir=cache_dir
         )
 
         # DataLoader の設定

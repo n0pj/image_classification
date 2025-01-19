@@ -7,6 +7,14 @@ import datetime
 import json
 import numpy as np
 import torch
+import pickle
+import hashlib
+from typing import Dict, List, Optional, Tuple, Union
+from torch.utils.data.dataset import T_co
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import logging
+from functools import lru_cache
 
 
 class COCOSplitter:
@@ -93,10 +101,44 @@ class COCOSplitter:
 
 
 class CustomDataset(Dataset):
-    def __init__(self, root_dir, annotation_file, transform=None, max_size=256):
+    """マルチラベル画像分類のためのカスタムデータセット
+
+    特徴:
+    - COCOフォーマットのアノテーションに対応
+    - キャッシュ機構による高速なデータロード
+    - メモリ効率の良い画像処理
+    - 豊富なデータ拡張
+    """
+
+    def __init__(
+        self,
+        root_dir: str,
+        annotation_file: str,
+        transform: Optional[A.Compose] = None,
+        max_size: int = 256,
+        use_cache: bool = True,
+        cache_dir: Optional[str] = None
+    ):
+        """
+        Args:
+            root_dir: 画像ファイルが格納されているディレクトリ
+            annotation_file: COCOフォーマットのアノテーションファイルパス
+            transform: カスタムのデータ拡張
+            max_size: 画像の最大サイズ
+            use_cache: キャッシュを使用するかどうか
+            cache_dir: キャッシュディレクトリのパス（Noneの場合はroot_dir/.cache）
+        """
         self.root_dir = Path(root_dir)
         self.transform = transform
         self.max_size = max_size
+        self.use_cache = use_cache
+        self.cache_dir = Path(cache_dir) if cache_dir else Path(
+            root_dir) / '.cache'
+
+        # キャッシュディレクトリの設定
+        if self.use_cache:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            self.cache: Dict[str, torch.Tensor] = {}
 
         # COCOフォーマットのアノテーションを読み込む
         with open(annotation_file, 'r') as f:
@@ -133,6 +175,38 @@ class CustomDataset(Dataset):
                         labels[cat_idx] = 1
                     self.samples.append((str(img_path), labels))
 
+        # 基本的なデータ拡張の設定
+        self.base_transform = A.Compose([
+            A.RandomRotate90(p=0.5),
+            A.Flip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.0625,
+                               scale_limit=0.1, rotate_limit=45, p=0.5),
+            A.OneOf([
+                A.GaussNoise(p=1),
+                A.GaussianBlur(p=1),
+                A.MotionBlur(p=1),
+            ], p=0.3),
+            A.OneOf([
+                A.OpticalDistortion(p=1),
+                A.GridDistortion(p=1),
+                A.ElasticTransform(p=1),
+            ], p=0.3),
+            A.OneOf([
+                A.CLAHE(clip_limit=2),
+                A.Sharpen(),
+                A.Emboss(),
+                A.RandomBrightnessContrast(),
+            ], p=0.3),
+            A.HueSaturationValue(p=0.3),
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2()
+        ])
+
+        # キャッシュの初期化
+        if self.use_cache:
+            self._initialize_cache()
+
+        # データセット情報の表示
         self._print_dataset_info()
 
     def _print_dataset_info(self):
@@ -160,20 +234,64 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, idx):
-        img_path, labels = self.samples[idx]
-        try:
-            image = Image.open(img_path).convert('RGB')
-            image = maintain_aspect_ratio_resize(image, self.max_size)
+    def _initialize_cache(self):
+        """キャッシュの初期化とチェック"""
+        if not self.use_cache:
+            return
 
-            if self.transform:
-                image = self.transform(image)
+        self.cache: Dict[str, torch.Tensor] = {}
+        for img_path, _ in self.samples:
+            cache_path = self._get_cache_path(img_path)
+            if cache_path.exists():
+                try:
+                    with cache_path.open('rb') as f:
+                        self.cache[img_path] = pickle.load(f)
+                except Exception as e:
+                    logging.warning(
+                        f"Failed to load cache for {img_path}: {e}")
+
+    def _get_cache_path(self, img_path: str) -> Path:
+        """画像パスからキャッシュファイルのパスを生成"""
+        hash_name = hashlib.md5(img_path.encode()).hexdigest()
+        return self.cache_dir / f"{hash_name}.pkl"
+
+    @lru_cache(maxsize=1000)
+    def _load_and_preprocess_image(self, img_path: str) -> np.ndarray:
+        """画像の読み込みと前処理（LRUキャッシュ付き）"""
+        image = Image.open(img_path).convert('RGB')
+        image = maintain_aspect_ratio_resize(image, self.max_size)
+        return np.array(image)
+
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+        img_path, labels = self.samples[idx]
+
+        try:
+            # キャッシュからの読み込みを試行
+            if self.use_cache and img_path in self.cache:
+                image = self.cache[img_path]
+            else:
+                # 画像の読み込みと前処理
+                image = self._load_and_preprocess_image(img_path)
+
+                # データ拡張の適用
+                if self.transform:
+                    augmented = self.transform(image=image)
+                    image = augmented['image']
+                else:
+                    augmented = self.base_transform(image=image)
+                    image = augmented['image']
+
+                # キャッシュの保存
+                if self.use_cache:
+                    cache_path = self._get_cache_path(img_path)
+                    with cache_path.open('wb') as f:
+                        pickle.dump(image, f)
+                    self.cache[img_path] = image
 
             return image, torch.FloatTensor(labels)
 
         except Exception as e:
-            print(f"Error loading image {img_path}: {str(e)}")
-            # エラーが発生した場合、データセット内の別の有効な画像を返す
+            logging.error(f"Error loading image {img_path}: {str(e)}")
             return self.__getitem__((idx + 1) % len(self))
 
 

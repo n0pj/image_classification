@@ -27,5 +27,11 @@ def get_train_args():
     parser.add_argument('--weight-decay', type=float, default=5e-4)
     parser.add_argument('--save-dir', type=str, default='./checkpoints')
 
+    # キャッシュ関連の引数
+    parser.add_argument('--use-cache', action='store_true',
+                        help='Enable dataset caching for faster loading')
+    parser.add_argument('--cache-dir', type=str,
+                        help='Directory to store cached data (default: data_dir/.cache)')
+
     args = parser.parse_args()
     return args
