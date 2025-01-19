@@ -9,8 +9,7 @@ import numpy as np
 import torch
 import pickle
 import hashlib
-from typing import Dict, List, Optional, Tuple, Union
-from torch.utils.data.dataset import T_co
+from typing import Dict, List, Optional, Tuple, Union, TypeVar
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import logging
